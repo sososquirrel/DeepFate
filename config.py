@@ -2,8 +2,8 @@ import numpy as np
 
 
 ## PATH RAW DATA
-PATH_TOOCAN_GLOBAL_FILE = '/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160901-20160910.dat.gz'
-#PATH_TOOCAN_GLOBAL_FILE ='/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160801-20160831.dat.gz'
+#PATH_TOOCAN_GLOBAL_FILE = '/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160901-20160910.dat.gz'
+PATH_TOOCAN_GLOBAL_FILE ='/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160801-20160831.dat.gz'
 PATH_SEGMENTED_IMGS = '/work/bb1153/b381993/data3/data/'
 PATH_RELATION_TABLE ='/work/bb1153/b381993/data3/data/RRR_utlimate_relation_2_table_UTC_dyamond_segmentation.csv'
 
