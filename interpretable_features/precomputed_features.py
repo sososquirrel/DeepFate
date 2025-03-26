@@ -15,7 +15,7 @@ from DeepFate.datasets.utils import get_list_valid_mcs, get_validity_lifecycles_
 from DeepFate.datasets.load_toocan_dyamond import load_TOOCAN_DYAMOND
 import DeepFate
 from DeepFate.config import PATH_TOOCAN_GLOBAL_FILE
-from features import *
+from DeepFate.interpretable_features.features import *
 
 path = PATH_TOOCAN_GLOBAL_FILE ###path change with new file
 list_object_mcs = load_TOOCAN_DYAMOND(path) ##change load_tooca
@@ -45,7 +45,8 @@ def pipeline(index, filename):
                                      specs=specs_i, 
                                      list_valid_mcs_2=list_valid_mcs_2, 
                                      label_all=label_all, 
-                                     list_start_times=list_start_times)
+                                     list_start_times=list_start_times,
+                                     correction=True)
     return df
 
 def process_data(args):

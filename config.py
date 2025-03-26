@@ -2,14 +2,18 @@ import numpy as np
 
 
 ## PATH RAW DATA
-#PATH_TOOCAN_GLOBAL_FILE = '/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160901-20160910.dat.gz'
-PATH_TOOCAN_GLOBAL_FILE ='/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160801-20160831.dat.gz'
+PATH_TOOCAN_GLOBAL_FILE = '/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160901-20160910.dat.gz' #sept
+#PATH_TOOCAN_GLOBAL_FILE ='/work/bb1153/b381993/data3/data/new_TOOCAN-GLOBAL-20160801-20160831.dat.gz' #aug
 PATH_SEGMENTED_IMGS = '/work/bb1153/b381993/data3/data/'
 PATH_RELATION_TABLE ='/work/bb1153/b381993/data3/data/RRR_utlimate_relation_2_table_UTC_dyamond_segmentation.csv'
 
+PATH_COMPUTED_DYAMOND_2D = '/work/bb1153/b381993/computed_dyamond_2d'
 
 PATH_DYAMOND_ROOT_DIR='/fastdata/ka1081/DYAMOND/data/summer_data/SAM-4km/OUT_2D/'
 
+
+START_3D_UTC_SEC = 1470020400
+END_3D_UTC_SEC = 1473465600
 
 
 ## CONSTANTS
@@ -21,8 +25,14 @@ FORBIDDEN_UTC = 17054.01
 ## VARS MCS
 NB_TIMESTEPS = 10 # previously 10
 
+#INPUT_VARIABLES = ['SHEAR', 'DEEPSHEAR', 'SHEARV', 'DEEPSHEARV', 'INT_NEG_FMSE_BL_DETRENDED', 'INT_POS_FMSE_BL_DETRENDED']
+
+#'SHEAR', 'DEEPSHEAR', 'SHEARV', 'DEEPSHEARV', 'INT_NEG_FMSE_BL_DETRENDED', 'INT_POS_FMSE_BL_DETRENDED'
+
 INPUT_VARIABLES = ['MCS_segmentation', 'LWNTA.2D','PW.2D','RH500.2D','RH700.2D','T2mm.2D',
-                   'IWP.2D','U10m.2D','V10m.2D', 'LANDMASK.2D', 'OM500.2D', 'OM700.2D', 'OM850.2D']#, 'Precac']
+                   'IWP.2D','U10m.2D','V10m.2D', 'LANDMASK.2D', 'OM500.2D', 'OM700.2D', 'OM850.2D',
+                    'SHEAR', 'DEEPSHEAR', 'SHEARV', 'DEEPSHEARV', 'INT_FMSE_BL', 'INT_FMSE_MID', 'DIFF_FMSE_MID_BL']#, 'Precac']
+
 
 OUTPUT_VARIABLES = np.array(['duration', 'time_maximal_extension', 'maximal_extension'])
 

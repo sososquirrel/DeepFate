@@ -153,21 +153,24 @@ def transparency_processing(data):
 
     return output
 
-def sel_with_keys(path:str, keys:tuple, lat_slice, lon_slice):
-    
+
+def sel_with_keys(path: str, keys: tuple, lat_slice, lon_slice):    
     if keys == ('lat', 'lon'):
-        output = xr.open_dataarray(path).sel(
-                lat = lat_slice , 
-                lon = lon_slice).values[0]
-        
+        if path.endswith(('BL.nc', 'MID.nc')):
+            output = xr.open_dataarray(path).sel(lat=lat_slice, lon=lon_slice).values
+        else:
+            output = xr.open_dataarray(path).sel(lat=lat_slice, lon=lon_slice).values[0]
+    
     elif keys == ('latitude', 'longitude'):
-        
         output = xr.open_dataset(path).cloud_mask.sel(
-                latitude = lat_slice , 
-            longitude = lon_slice).values[0]
+            latitude=lat_slice, 
+            longitude=lon_slice
+        ).values[0]
+    
+    else:
+        raise ValueError(f"Unrecognized keys: {keys}")
     
     return output
-        
 
 def open_xarray_rolling_lon(file_path, lat_bary, lon_bary, lat_delta, lon_delta, output_shape:tuple, keys_sel:tuple=('lat', 'lon')):
     
@@ -226,7 +229,7 @@ def open_xarray_rolling_lon(file_path, lat_bary, lon_bary, lat_delta, lon_delta,
         output = sel_with_keys(path=file_path, 
                     keys=keys_sel, lat_slice=lat_slice, 
                     lon_slice = lon_slice)
-
+    
     
     return crop_center(img = output,cropx = output_shape[0],cropy=output_shape[1])
 
@@ -240,7 +243,11 @@ def gaussian_filter_mcs(msc_mask_snapshot, bump):
     return output_filtered
 
 
-def get_single_validity_idx_start_idx_end(mcs_object, rolling_window=ROLLING_WINDOW, gradient_threshold=GRADIENT_THRESHOLD,  fraction_max_end=FRACTION_MAX_END, fraction_max_start=FRACTION_MAX_START):
+def get_single_validity_idx_start_idx_end(mcs_object, rolling_window=ROLLING_WINDOW, gradient_threshold=GRADIENT_THRESHOLD,  fraction_max_end=FRACTION_MAX_END, fraction_max_start=FRACTION_MAX_START, mode_3d=None, UTC_3d_start=None, UTC_3d_end=None):
+    
+    # Raise ValueError if mode_3d is True but UTC_3d_start or UTC_3d_end is None
+    if mode_3d and (UTC_3d_start is None or UTC_3d_end is None):
+        raise ValueError("When mode_3d is True, UTC_3d_start and UTC_3d_end cannot be None.")
     
     
     #parameters
@@ -283,13 +290,20 @@ def get_single_validity_idx_start_idx_end(mcs_object, rolling_window=ROLLING_WIN
     
     if not idx_start<np.argmax(surfaces)<idx_end:
         return False, None, None
+    
+    if mode_3d:
+        cond_start = mcs_object.clusters.LC_UTC_time[idx_start]<UTC_3d_start
+        cond_end = mcs_object.clusters.LC_UTC_time[idx_end]>UTC_3d_end
+
+        if cond_start or cond_end:
+            return False, None, None
 
     return True, idx_start, idx_end
 
 
 
 
-def get_validity_lifecycles_start_end(list_valid_mcs, rolling_window=ROLLING_WINDOW, gradient_threshold=GRADIENT_THRESHOLD,  fraction_max_end=FRACTION_MAX_END, fraction_max_start=FRACTION_MAX_START):
+def get_validity_lifecycles_start_end(list_valid_mcs, rolling_window=ROLLING_WINDOW, gradient_threshold=GRADIENT_THRESHOLD,  fraction_max_end=FRACTION_MAX_END, fraction_max_start=FRACTION_MAX_START, mode_3d=None, UTC_3d_start=None, UTC_3d_end=None):
 
     validity_list =[]
     idx_start_list =[]
@@ -297,7 +311,7 @@ def get_validity_lifecycles_start_end(list_valid_mcs, rolling_window=ROLLING_WIN
     
     for mcs_object in tqdm.tqdm(list_valid_mcs):
     
-        validity, idx_start, idx_end = get_single_validity_idx_start_idx_end(mcs_object, rolling_window=rolling_window, gradient_threshold=gradient_threshold, fraction_max_end=fraction_max_end, fraction_max_start=fraction_max_start)
+        validity, idx_start, idx_end = get_single_validity_idx_start_idx_end(mcs_object, rolling_window=rolling_window, gradient_threshold=gradient_threshold, fraction_max_end=fraction_max_end, fraction_max_start=fraction_max_start, mode_3d=mode_3d, UTC_3d_start=UTC_3d_start, UTC_3d_end=UTC_3d_end)
         
         validity_list.append(validity)
         idx_start_list.append(idx_start)

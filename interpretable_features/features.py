@@ -3,7 +3,7 @@ import copy
 from scipy import signal
 from timezonefinder import TimezoneFinder
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from functools import wraps
 import DeepFate
@@ -83,25 +83,42 @@ def get_all_mcs_area(X_mask_mcs, X_mask_neighbours):
     assert sum_areas.shape == names.shape
     return names, sum_areas
 
-#@timeit
-def _utc_to_local(utc_time_str, lat, lon):
-    tf = TimezoneFinder()
-    timezone_str = tf.certain_timezone_at(lat=lat, lng=lon)
-    timezone = pytz.timezone(timezone_str)
-    str_time = datetime.fromtimestamp(utc_time_str).strftime("%Y-%m-%dT%H:%M:%S")
-    utc_time = datetime.strptime(str_time, "%Y-%m-%dT%H:%M:%S")
-    local_time = utc_time.replace(tzinfo=pytz.utc).astimezone(timezone)
+
+def _utc_to_local_approx(utc_time, lon):
+    # Calculate the offset based on longitude (15° per hour)
+    offset_hours = lon / 15.0
+    
+    # Convert UTC time to a datetime object
+    utc_dt = datetime.utcfromtimestamp(utc_time)
+    
+    # Calculate the approximate local time by adding the offset to UTC time
+    local_time = utc_dt + timedelta(hours=offset_hours)
+    
+    # Return the local time's hour
     return local_time.hour
 
-#@timeit
-def get_local_hour(mcs_object, start_index):
-    #TODO circularity in hours to add ! 
-    positions = get_absolute_position_from_birth(mcs_object, start_index)[1]
-    utimes = mcs_object.clusters.LC_UTC_time[start_index:start_index+NB_TIMESTEPS]
-    #local_hours = np.array([_utc_to_local(float(t), lat =float(lat), lon = float(lon)) for (t,lat,lon) in zip(utimes, positions[:NB_TIMESTEPS], positions[NB_TIMESTEPS:])])
+def get_local_hour_approx(mcs_object, start_index, NB_TIMESTEPS):
+    latitudes = mcs_object.clusters.LC_lat[start_index:start_index + NB_TIMESTEPS]
+    longitudes = mcs_object.clusters.LC_lon[start_index:start_index + NB_TIMESTEPS]
+    
+    def convert(lon):
+        return lon - 360 if lon > 180 else lon
+    
+    longitudes = np.vectorize(convert)(longitudes)
+    utimes = mcs_object.clusters.LC_UTC_time[start_index:start_index + NB_TIMESTEPS]
+    
+    # Apply the approximate _utc_to_local_approx function
+    local_hours = np.array([
+        _utc_to_local_approx(float(t), float(lon)) 
+        for (t, lon) in zip(utimes, longitudes)
+    ])
+    
     names = np.array([f'local_hour_time_{i}' for i in range(NB_TIMESTEPS)])
+    
     assert local_hours.shape == names.shape
+    
     return names, local_hours
+
 
 #@timeit
 def get_propagation_velocity(mcs_object, start_index):
@@ -133,36 +150,64 @@ def get_std_everywhere(X_images):
     assert means.shape == names.shape
     return names, means
  
-#@timeit
-def get_mean_under_cloud(X_images, X_mask_mcs):
-    X_images_masked = X_mask_mcs * X_images[:,1:]
-    means = np.mean(X_images_masked, axis=(-1, -2)).flatten()
+def get_mean_under_cloud(X_images, X_mask_mcs, correction=False):
+    X_images_masked = X_mask_mcs * X_images[:, 1:]
+    sum_mask = np.sum(X_mask_mcs, axis=(-1, -2))
+    sum_mask[sum_mask==[0.]]=[1.]
+    if correction:
+        means = np.sum(X_images_masked, axis=(-1, -2)) / sum_mask
+        means = means.flatten()
+    else:
+        means = np.mean(X_images_masked, axis=(-1, -2)).flatten()
     names = np.array([f'mean_under_cloud_var_{j}_time_{i}' for i in range(NB_TIMESTEPS) for j in range(1, NB_VARIABLES)])
     assert means.shape == names.shape
     return names, means
 
 #@timeit
-def get_std_under_cloud(X_images, X_mask_mcs):
-    X_images_masked = X_mask_mcs * X_images[:,1:]
-    means = np.std(X_images_masked, axis=(-1, -2)).flatten()
+def get_std_under_cloud(X_images, X_mask_mcs, correction=False):
+    X_images_masked = X_mask_mcs * X_images[:, 1:]
+    sum_mask = np.sum(X_mask_mcs, axis=(-1, -2))
+    sum_mask[sum_mask==[0.]]=[1.]
+    if correction:
+        # calculate mean over non-zero mask first
+        means = np.sum(X_images_masked, axis=(-1, -2)) / sum_mask
+        squared_diff = X_mask_mcs * (X_images[:, 1:] - means[..., None, None]) ** 2
+        stds = np.sqrt(np.sum(squared_diff, axis=(-1, -2)) / sum_mask)
+        stds = stds.flatten()
+    else:
+        stds = np.std(X_images_masked, axis=(-1, -2)).flatten()
     names = np.array([f'std_under_cloud_var_{j}_time_{i}' for i in range(NB_TIMESTEPS) for j in range(1, NB_VARIABLES)])
-    assert means.shape == names.shape
-    return names, means
- 
+    assert stds.shape == names.shape
+    return names, stds
+
 #@timeit
-def get_mean_everywhere_except_cloud(X_images, X_anti_mask_mcs):
-    X_images_masked = X_anti_mask_mcs * X_images[:,1:]
-    means = np.mean(X_images_masked, axis=(-1, -2)).flatten()
+def get_mean_everywhere_except_cloud(X_images, X_anti_mask_mcs, correction=False):
+    X_images_masked = X_anti_mask_mcs * X_images[:, 1:]
+    sum_mask = np.sum(X_images_masked, axis=(-1, -2))
+    sum_mask[sum_mask==[0.]]=[1.]
+    if correction:
+        means = np.sum(X_images_masked, axis=(-1, -2)) / sum_mask
+        means = means.flatten()
+    else:
+        means = np.mean(X_images_masked, axis=(-1, -2)).flatten()
     names = np.array([f'mean_everywhere_except_cloud_var_{j}_time_{i}' for i in range(NB_TIMESTEPS) for j in range(1, NB_VARIABLES)])
     assert means.shape == names.shape
     return names, means
+
 #@timeit
-def get_mean_under_all_mcs_neighbours(X_images,X_mask_neighbours):
-    X_images_masked = X_mask_neighbours * X_images[:,1:,:,:]
-    means = np.mean(X_images_masked, axis=(-1, -2)).flatten()
-    names = np.array([f'mean_under_all_mcs_neighbours_var_{j}_time_{i}' for i in range(NB_TIMESTEPS) for j in range(1,NB_VARIABLES)])
+def get_mean_under_all_mcs_neighbours(X_images, X_mask_neighbours, correction=False):
+    X_images_masked = X_mask_neighbours * X_images[:, 1:, :, :]
+    sum_mask = np.sum(X_images_masked, axis=(-1, -2))
+    sum_mask[sum_mask==[0.]]=[1.]
+    if correction:
+        means = np.sum(X_images_masked, axis=(-1, -2)) / sum_mask
+        means = means.flatten()
+    else:
+        means = np.mean(X_images_masked, axis=(-1, -2)).flatten()
+    names = np.array([f'mean_under_all_mcs_neighbours_var_{j}_time_{i}' for i in range(NB_TIMESTEPS) for j in range(1, NB_VARIABLES)])
     assert means.shape == names.shape
     return names, means
+
 #@timeit
 def _get_divergence_omega(X_images):
     U = X_images[:,-6, :,:]
@@ -172,18 +217,44 @@ def _get_divergence_omega(X_images):
     return np.array((dx_U + dy_V))
 
 #@timeit
-def get_div_multiple_means(X_images, X_mask_mcs, X_mask_neighbours, X_anti_mask_mcs):
-    div = np.array(_get_divergence_omega(X_images))
-    div_masked = X_mask_mcs[:,0] * div
-    div_masked_neighbours = X_mask_neighbours[:,0] * div
-    div_masked_anti_mcs = X_anti_mask_mcs[:,0] * div 
-    out = np.array([np.mean(div, axis=(-1, -2)), 
-                     np.mean(div_masked, axis=(-1, -2)), 
-                     np.mean(div_masked_neighbours, axis=(-1, -2)),  
-                     np.mean(div_masked_anti_mcs, axis=(-1, -2))]).flatten()
-    names = np.array([f'div_full_image_time_{i}' for i in range(NB_TIMESTEPS)] + [f'div_mask_mcs_time_{i}' for i in range(NB_TIMESTEPS)] + [f'div_mask_neighbours_time_{i}' for i in range(NB_TIMESTEPS)] + [f'div_anti_mask_time_{i}' for i in range(NB_TIMESTEPS)])
+def get_div_multiple_means(X_images, X_mask_mcs, X_mask_neighbours, X_anti_mask_mcs, correction=False):
+    div = np.array(_get_divergence_omega(X_images))  # Calculate divergence
+    
+    # Apply the masks to the divergence (Assuming X_mask is of the shape (nt, ny, nx))
+    div_masked = X_mask_mcs[:, 0] * div  # Apply the first mask for MCS
+    div_masked_neighbours = X_mask_neighbours[:, 0] * div  # Apply the mask for neighbouring MCS
+    div_masked_anti_mcs = X_anti_mask_mcs[:, 0] * div  # Apply the anti-mask for non-MCS regions
+    
+    # If correction is true, only compute mean where the mask is 1
+    if correction:
+        div_full_image_mean = np.sum(div, axis=(-1, -2)) / np.sum(np.ones_like(div), axis=(-1, -2))  # Mean over the whole domain, with correction
+        div_masked_mean = np.sum(div_masked, axis=(-1, -2)) / np.sum(X_mask_mcs[:, 0], axis=(-1, -2))  # Mean over the masked MCS region, with correction
+        div_masked_neighbours_mean = np.sum(div_masked_neighbours, axis=(-1, -2)) / np.sum(X_mask_neighbours[:, 0], axis=(-1, -2))  # Mean over the masked neighbouring MCS region, with correction
+        div_masked_anti_mcs_mean = np.sum(div_masked_anti_mcs, axis=(-1, -2)) / np.sum(X_anti_mask_mcs[:, 0], axis=(-1, -2))  # Mean over the anti-masked region, with correction
+    else:
+        # Without correction, just compute the mean over the whole image
+        div_full_image_mean = np.mean(div, axis=(-1, -2))  # Mean over the whole domain
+        div_masked_mean = np.mean(div_masked, axis=(-1, -2))  # Mean over the masked MCS region
+        div_masked_neighbours_mean = np.mean(div_masked_neighbours, axis=(-1, -2))  # Mean over the masked neighbouring MCS region
+        div_masked_anti_mcs_mean = np.mean(div_masked_anti_mcs, axis=(-1, -2))  # Mean over the anti-masked region
+    
+    # Flatten the output into a 1D array
+    out = np.array([div_full_image_mean, 
+                    div_masked_mean, 
+                    div_masked_neighbours_mean,  
+                    div_masked_anti_mcs_mean]).flatten()
+    
+    # Generate the appropriate names for each output variable
+    names = np.array([f'div_full_image_time_{i}' for i in range(NB_TIMESTEPS)] + 
+                     [f'div_mask_mcs_time_{i}' for i in range(NB_TIMESTEPS)] + 
+                     [f'div_mask_neighbours_time_{i}' for i in range(NB_TIMESTEPS)] + 
+                     [f'div_anti_mask_time_{i}' for i in range(NB_TIMESTEPS)])
+    
+    # Ensure that the output size matches the generated names
     assert out.shape == names.shape
+    
     return names, out
+
 
 #@timeit
 def get_mean_divergence_omega(X_images):
@@ -447,94 +518,84 @@ def create_df_from_outputs(names, values):
     df.index = [0]
     return df
 
-#@timeit
-def get_all_features_single_mcs(X_images, specs, list_valid_mcs_2, label_all, list_start_times):
+def get_all_features_single_mcs(X_images, specs, list_valid_mcs_2, label_all, list_start_times, correction=False):
     mcs_label = specs[0]
-    mcs_index = np.where(label_all==mcs_label)[0]
+    mcs_index = np.where(label_all == mcs_label)[0]
     assert len(mcs_index) == 1
     mcs_index = mcs_index[0]
     mcs_object = list_valid_mcs_2[mcs_index]
     start_index = list_start_times[mcs_index]
     
     X_images = np.nan_to_num(X_images)
-    X_mask_mcs, X_mask_neighbours, X_anti_mask_mcs = create_masks(X_images = X_images, z_specs = specs)
+    X_mask_mcs, X_mask_neighbours, X_anti_mask_mcs = create_masks(X_images=X_images, z_specs=specs)
     
     ###### NEIGHBORS
     df_nb_of_neighbour = create_df_from_outputs(*number_of_neighbour(X_images=X_images))
-    
-    
     df_nb_of_active_neighbour = create_df_from_outputs(*number_of_active_neighbour(X_images=X_images, array_index_label=label_all))
     df_mean_position_neighbour = create_df_from_outputs(*get_mean_position_neighbour(X_images=X_images, specs=specs))
     df_min_position_neighbour = create_df_from_outputs(*get_min_position_neighbour(X_images=X_images, specs=specs))
-    df_average_age_neighbour =create_df_from_outputs(*get_average_age_neighbour(X_images=X_images, specs=specs, list_mcs_object=list_valid_mcs_2, array_index_label=label_all, start_list=list_start_times))
-    df_max_age_neighbour =create_df_from_outputs(*get_max_age_neighbour(X_images=X_images, specs=specs, list_mcs_object=list_valid_mcs_2, array_index_label=label_all, start_list=list_start_times))
+    df_average_age_neighbour = create_df_from_outputs(*get_average_age_neighbour(X_images=X_images, specs=specs, list_mcs_object=list_valid_mcs_2, array_index_label=label_all, start_list=list_start_times))
+    df_max_age_neighbour = create_df_from_outputs(*get_max_age_neighbour(X_images=X_images, specs=specs, list_mcs_object=list_valid_mcs_2, array_index_label=label_all, start_list=list_start_times))
     
     df_bool_long_lived_neighbour_detected = create_df_from_outputs(*long_lived_neighbour_detected(X_images=X_images, specs=specs, list_mcs_object=list_valid_mcs_2, array_index_label=label_all, start_list=list_start_times))
     df_mean_interaction_power = create_df_from_outputs(*mean_interaction_power(X_mask_mcs=X_mask_mcs, X_mask_neighbours=X_mask_neighbours))
     df_max_interaction_power = create_df_from_outputs(*max_interaction_power(X_mask_mcs=X_mask_mcs, X_mask_neighbours=X_mask_neighbours))
     
-
-    
     DF_NEIGHBORS = pd.concat([df_nb_of_neighbour, df_nb_of_active_neighbour, df_mean_position_neighbour,
                               df_min_position_neighbour, df_average_age_neighbour, df_max_age_neighbour,
-                            df_bool_long_lived_neighbour_detected, df_mean_interaction_power, df_max_interaction_power], axis=1)
-    
-    #DF_NEIGHBORS = pd.concat([df_nb_of_neighbour, df_nb_of_active_neighbour, df_mean_position_neighbour,
-     #                         df_min_position_neighbour, df_mean_interaction_power, df_max_interaction_power], axis=1)
-    
+                              df_bool_long_lived_neighbour_detected, df_mean_interaction_power, df_max_interaction_power], axis=1)
     
     ## DISPLACEMENT
     df_migration_distance_from_birth = create_df_from_outputs(*get_migration_distance_from_birth(mcs_object=mcs_object, start_index=start_index))
-    df_absolute_position_from_birth =create_df_from_outputs(*get_absolute_position_from_birth(mcs_object=mcs_object, start_index=start_index))
-    df_propagation_velocity = create_df_from_outputs(*get_propagation_velocity(mcs_object=mcs_object, start_index=start_index))
-    DF_DISPLACEMENT = pd.concat([df_migration_distance_from_birth, df_absolute_position_from_birth], axis=1)
+    df_absolute_position_from_birth = create_df_from_outputs(*get_absolute_position_from_birth(mcs_object=mcs_object, start_index=start_index))
     
+    # Add local time
+    df_local_hour = create_df_from_outputs(*get_local_hour_approx(mcs_object=mcs_object, start_index=start_index, NB_TIMESTEPS=X_images.shape[0]))
     
+    DF_DISPLACEMENT = pd.concat([df_migration_distance_from_birth, df_absolute_position_from_birth, df_local_hour], axis=1)
+    #DF_DISPLACEMENT = pd.concat([df_migration_distance_from_birth, df_absolute_position_from_birth], axis=1)
     
-    # TIME 
-    #df_local_hour = create_df_from_outputs(*get_local_hour(mcs_object=mcs_object, start_index=start_index))
-    #DF_TIME = df_local_hour
-    
-    # DIVERGENCES
+    ## DIVERGENCES
     df_mean_divergence_omega = create_df_from_outputs(*get_mean_divergence_omega(X_images=X_images))
-    df_div_multiple_means = create_df_from_outputs(*get_div_multiple_means(X_images= X_images , X_mask_mcs = X_mask_mcs, X_mask_neighbours = X_mask_neighbours, X_anti_mask_mcs=X_anti_mask_mcs))
+    df_div_multiple_means = create_df_from_outputs(*get_div_multiple_means(X_images=X_images, X_mask_mcs=X_mask_mcs, X_mask_neighbours=X_mask_neighbours, X_anti_mask_mcs=X_anti_mask_mcs, correction=correction))
     DF_DIVS = pd.concat([df_mean_divergence_omega, df_div_multiple_means], axis=1)
     
-    # FORM
+    ## FORM
     df_circularity_param = create_df_from_outputs(*get_circularity(X_mask_mcs=X_mask_mcs))
     df_gradient_area = create_df_from_outputs(*get_gradient_area(X_mask_mcs=X_mask_mcs))
-    df_average_diameters = create_df_from_outputs(*average_diameters(X_mask_mcs = X_mask_mcs))
+    df_average_diameters = create_df_from_outputs(*average_diameters(X_mask_mcs=X_mask_mcs))
     df_eccentricity_132 = create_df_from_outputs(*get_eccentricity_132(mcs_object=mcs_object, start_index=start_index))
     df_eccentricity_172 = create_df_from_outputs(*get_eccentricity_172(mcs_object=mcs_object, start_index=start_index))
     df_area = create_df_from_outputs(*get_mcs_area(X_mask_mcs=X_mask_mcs))
-    df_all_area = create_df_from_outputs(*get_all_mcs_area(X_mask_mcs=X_mask_mcs, X_mask_neighbours = X_mask_neighbours))
+    df_all_area = create_df_from_outputs(*get_all_mcs_area(X_mask_mcs=X_mask_mcs, X_mask_neighbours=X_mask_neighbours))
     DF_FORM = pd.concat([df_area, df_gradient_area, df_all_area, df_circularity_param, df_average_diameters, df_eccentricity_132, df_eccentricity_172], axis=1)
     
-    #VARIABLES MEANS
+    ## VARIABLES MEANS
     df_mean_everywhere = create_df_from_outputs(*get_mean_everywhere(X_images=X_images))
-    df_mean_under_cloud = create_df_from_outputs(*get_mean_under_cloud(X_images=X_images, X_mask_mcs = X_mask_mcs))
-    df_mean_everywhere_except_cloud = create_df_from_outputs(*get_mean_everywhere_except_cloud(X_images=X_images, X_anti_mask_mcs=X_anti_mask_mcs))
-    df_mean_under_all_clouds = create_df_from_outputs(*get_mean_under_all_mcs_neighbours(X_images=X_images, X_mask_neighbours = X_mask_neighbours))
+    df_mean_under_cloud = create_df_from_outputs(*get_mean_under_cloud(X_images=X_images, X_mask_mcs=X_mask_mcs, correction=correction))
+    df_mean_everywhere_except_cloud = create_df_from_outputs(*get_mean_everywhere_except_cloud(X_images=X_images, X_anti_mask_mcs=X_anti_mask_mcs, correction=correction))
+    df_mean_under_all_clouds = create_df_from_outputs(*get_mean_under_all_mcs_neighbours(X_images=X_images, X_mask_neighbours=X_mask_neighbours, correction=correction))
     DF_MEANS = pd.concat([df_mean_everywhere, df_mean_under_cloud, df_mean_everywhere_except_cloud, df_mean_under_all_clouds], axis=1)
     
-    ##STDS
+    ## STDS
     df_std_everywhere = create_df_from_outputs(*get_std_everywhere(X_images=X_images))
-    df_std_under_cloud = create_df_from_outputs(*get_std_under_cloud(X_images=X_images, X_mask_mcs=X_mask_mcs))
+    df_std_under_cloud = create_df_from_outputs(*get_std_under_cloud(X_images=X_images, X_mask_mcs=X_mask_mcs, correction=correction))
     DF_STD = pd.concat([df_std_everywhere, df_std_under_cloud], axis=1)
 
-    assert(len(DF_NEIGHBORS)==1)
-    assert(len(DF_DISPLACEMENT)==1)
-    assert(len(DF_DIVS)==1)
-    assert(len(DF_FORM)==1)
-    assert(len(DF_MEANS)==1)
-    assert(len(DF_STD)==1)
+    assert(len(DF_NEIGHBORS) == 1)
+    assert(len(DF_DISPLACEMENT) == 1)
+    assert(len(DF_DIVS) == 1)
+    assert(len(DF_FORM) == 1)
+    assert(len(DF_MEANS) == 1)
+    assert(len(DF_STD) == 1)
+    
     global_df = pd.concat([DF_NEIGHBORS, DF_DISPLACEMENT, DF_DIVS, DF_FORM, DF_MEANS, DF_STD], axis=1)
     global_df.loc[0, 'label_mcs'] = int(mcs_label)
     global_df.loc[0, 'y_duration'] = specs[1]
     global_df.loc[0, 'y_max_extend'] = specs[5]
     
-        
     return global_df
+
 
 
 
