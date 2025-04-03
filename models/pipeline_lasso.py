@@ -6,6 +6,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import GenericUnivariateSelect, f_regression
 from scipy.stats import pearsonr
+
+import sys
+module_dir = '/home/b/b381993'
+sys.path.append(module_dir)
+
 from DeepFate.models.RemoveCorrelatedFeatures import RemoveCorrelatedFeatures
 from DeepFate.important_features.utils_important_features import get_datasets
 import os
@@ -31,6 +36,7 @@ if __name__ == '__main__':
     train_dataset_raw = pd.read_csv(args.train_data)
     test_dataset_raw = pd.read_csv(args.test_data)
 
+    """
     ########ONLY GROWTH RATE
     dict_exp1 = {'df_train': train_dataset_raw, 
                  'df_test': test_dataset_raw, 
@@ -65,18 +71,18 @@ if __name__ == '__main__':
         y_test = test_dataset_raw['y_max_extend']
         pearsonr_score = pearsonr(y_test, y_pred)
         print('check!!!', pearsonr_score)
-
+    """
     #######ALL FEATURES
     print(len(train_dataset_raw), len(test_dataset_raw))
 
-    blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area']
+    blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area', 'var_1_']
     dict_exp = {'df_train': train_dataset_raw,
                 'df_test': test_dataset_raw,
                 'all_features': True,
                 'one_features_name': '',
                 'blacklist': blacklist_exp}
     
-    for nt_eval in [10]:
+    for nt_eval in [1,2,4,5,6,7,8,9,10]:
         train_dataset, test_dataset = get_datasets(
             all_features=dict_exp['all_features'], 
             df_train=dict_exp['df_train'], 
@@ -94,8 +100,8 @@ if __name__ == '__main__':
         selector = GenericUnivariateSelect(score_func=f_regression, mode='percentile', param=30)
 
         # Assuming RemoveCorrelatedFeatures is a custom function you implemented
-        remove_correlated = RemoveCorrelatedFeatures(threshold=0.85, 
-                                                    priority_vars=['var_9', 'var_13', 'var_19', 'var_14', 'var_17', 'var_18'],
+        remove_correlated = RemoveCorrelatedFeatures(threshold=0.8, 
+                                                    priority_vars=['var_9', 'var_13', 'var_19', 'var_14', 'interaction_power'],
                                                     blacklist_vars=[])
 
         # Create the pipeline

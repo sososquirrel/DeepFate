@@ -26,7 +26,7 @@ def parse_args():
                         help="Path to the test dataset")
     parser.add_argument('--model_save_path', type=str, default='/home/b/b381993/DeepFate/models/saved_models/', 
                         help="Path to save the model")
-    parser.add_argument('--metrics_save_path', type=str, default='/home/b/b381993/DeepFate/models/saved_metrics/', 
+    parser.add_argument('--metrics_save_path', type=str, default='/home/b/b381993/DeepFate/metrics/saved_metrics/', 
                         help="Path to save the metrics")
     return parser.parse_args()
 
@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
     print(len(train_dataset_raw), len(test_dataset_raw))
 
-    only_growth_rate = True
+    only_growth_rate = False
 
     if only_growth_rate:
         dict_exp = {'df_train': train_dataset_raw, 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
                     'one_features_name': 'gradient_area',
                     'blacklist': []}
     else:
-        blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area']
+        blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area', 'var_1_']
         dict_exp = {
             'df_train': train_dataset_raw,
             'df_test': test_dataset_raw,

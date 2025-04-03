@@ -17,7 +17,7 @@ from sklearn.ensemble import RandomForestRegressor
 if __name__ == '__main__':
     train_dataset_raw = pd.read_csv('/work/bb1153/b381993/data/VERSION_MARCH_NEW_INTERPRETABLE/train_dataset.csv')
     test_dataset_raw = pd.read_csv('/work/bb1153/b381993/data/VERSION_MARCH_NEW_INTERPRETABLE/test_dataset.csv')
-
+    """
     ########ONLY GROWTH RATE
     dict_exp1 = {'df_train': train_dataset_raw, 
                  'df_test': test_dataset_raw, 
@@ -60,10 +60,10 @@ if __name__ == '__main__':
         pearsonr_score = pearsonr(y_test, y_pred)
         print(f'Check for timestep {nt_eval}: Pearson correlation = {pearsonr_score[0]}')
 
-    
+    """
     #######ALL FEATURES (for completeness, you can choose to activate this part)
 
-    blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area']
+    blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area', 'var_1_']
     dict_exp = {'df_train': train_dataset_raw,
                 'df_test': test_dataset_raw,
                 'all_features': True,
@@ -85,8 +85,8 @@ if __name__ == '__main__':
         # Feature selection and correlation removal
         selector = GenericUnivariateSelect(score_func=f_regression, mode='percentile', param=30)
 
-        remove_correlated = RemoveCorrelatedFeatures(threshold=0.85, 
-                                                    priority_vars=['var_9', 'var_13', 'var_19', 'var_14', 'var_17', 'var_18'],
+        remove_correlated = RemoveCorrelatedFeatures(threshold=0.8, 
+                                                    priority_vars=['var_9', 'var_13', 'var_19', 'var_14', 'interaction_power'],
                                                     blacklist_vars=[])
 
         # Random Forest Regressor pipeline
@@ -112,5 +112,3 @@ if __name__ == '__main__':
 
         # Save the trained pipeline
         joblib.dump(pipeline_rf, f'/home/b/b381993/DeepFate/models/saved_models/pipeline_rf_{nt_eval}.pkl')
-
-

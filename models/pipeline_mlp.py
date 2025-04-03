@@ -36,6 +36,12 @@ if __name__ == '__main__':
         )
 
         y_train = train_dataset_raw['y_max_extend']
+        
+        selector = GenericUnivariateSelect(score_func=f_regression, mode='percentile', param=30)
+
+        remove_correlated = RemoveCorrelatedFeatures(threshold=0.8, 
+                                                    priority_vars=['var_9', 'var_13', 'var_19', 'var_14', 'interaction_power'],
+                                                    blacklist_vars=[])
 
         # Define MLP estimator with the given parameters
         mlp_estimator = MLPRegressor(hidden_layer_sizes=(100,), 
@@ -45,10 +51,11 @@ if __name__ == '__main__':
                                      early_stopping=True, 
                                      verbose=False)
 
-        # Create pipeline with scaling and MLP
         pipeline_mlp = Pipeline([
+            ('remove_correlated', remove_correlated),
+            ('feature_selection', selector),
             ('scaler', StandardScaler()),  
-            ('mlp', mlp_estimator)
+            ('lasso', mlp_estimator)
         ])
 
         # Fit the pipeline to the training data
@@ -68,7 +75,7 @@ if __name__ == '__main__':
     
     #######ALL FEATURES (for completeness, you can choose to activate this part)
     
-    blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area']
+    blacklist_exp = ['gradient_area', 'average_diameter', 'mcs_area', 'var_1_']
     dict_exp = {'df_train': train_dataset_raw,
                 'df_test': test_dataset_raw,
                 'all_features': True,
@@ -76,7 +83,7 @@ if __name__ == '__main__':
                 'blacklist': blacklist_exp}
     
     #for nt_eval in range(1, 10):
-    for nt_eval in [10]:
+    for nt_eval in range(1, 11):
         train_dataset, test_dataset = get_datasets(
             all_features=dict_exp['all_features'], 
             df_train=dict_exp['df_train'], 
@@ -91,8 +98,8 @@ if __name__ == '__main__':
         # Feature selection and correlation removal
         selector = GenericUnivariateSelect(score_func=f_regression, mode='percentile', param=30)
 
-        remove_correlated = RemoveCorrelatedFeatures(threshold=0.85, 
-                                                    priority_vars=['var_9', 'var_13', 'var_19', 'var_14', 'var_17', 'var_18'],
+        remove_correlated = RemoveCorrelatedFeatures(threshold=0.8, 
+                                                    priority_vars=['var_9', 'var_13', 'var_19', 'var_14', 'interaction_power'],
                                                     blacklist_vars=[])
 
         # MLP Regressor pipeline
